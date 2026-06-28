@@ -11,9 +11,9 @@
 #if defined(__SSE2__) || \
     (defined(_MSC_VER) && (defined(_M_X64) || defined(_M_IX86_FP) && _M_IX86_FP >= 2))
 #include <emmintrin.h>
-#define SWISS_TABLE_DETAIL_HAS_SSE2 1
+#define SWISSMAP_DETAIL_HAS_SSE2 1
 #else
-#define SWISS_TABLE_DETAIL_HAS_SSE2 0
+#define SWISSMAP_DETAIL_HAS_SSE2 0
 #endif
 
 namespace swiss::detail
@@ -54,7 +54,7 @@ namespace swiss::detail
 
         constexpr void reset_control_bytes() noexcept
         {
-#if SWISS_TABLE_DETAIL_HAS_SSE2
+#if SWISSMAP_DETAIL_HAS_SSE2
             const __m128i empty = _mm_set1_epi8(static_cast<char>(ctrl::empty));
             _mm_store_si128(reinterpret_cast<__m128i *>(ctrl_bytes), empty);
 #else
@@ -137,7 +137,7 @@ namespace swiss::detail
 
         constexpr void reset_control_bytes() noexcept
         {
-#if SWISS_TABLE_DETAIL_HAS_SSE2
+#if SWISSMAP_DETAIL_HAS_SSE2
             const __m128i empty = _mm_set1_epi8(static_cast<char>(ctrl::empty));
             _mm_store_si128(reinterpret_cast<__m128i *>(ctrl_bytes), empty);
 #else
@@ -209,4 +209,4 @@ namespace swiss::detail
     };
 }
 
-#undef SWISS_TABLE_DETAIL_HAS_SSE2
+#undef SWISSMAP_DETAIL_HAS_SSE2

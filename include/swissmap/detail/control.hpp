@@ -7,9 +7,9 @@
 #if defined(__SSE2__) || \
     (defined(_MSC_VER) && (defined(_M_X64) || defined(_M_IX86_FP) && _M_IX86_FP >= 2))
 #include <emmintrin.h>
-#define SWISS_TABLE_DETAIL_HAS_SSE2 1
+#define SWISSMAP_DETAIL_HAS_SSE2 1
 #else
-#define SWISS_TABLE_DETAIL_HAS_SSE2 0
+#define SWISSMAP_DETAIL_HAS_SSE2 0
 #endif
 
 namespace swiss::detail
@@ -81,14 +81,14 @@ namespace swiss::detail
     {
         static constexpr std::size_t width = 16;
 
-#if SWISS_TABLE_DETAIL_HAS_SSE2
+#if SWISSMAP_DETAIL_HAS_SSE2
         __m128i _ctrl;
 #else
         const ctrl_t *ctrl;
 #endif
 
         explicit control_word(const ctrl_t *p) noexcept
-#if SWISS_TABLE_DETAIL_HAS_SSE2
+#if SWISSMAP_DETAIL_HAS_SSE2
             : _ctrl(_mm_loadu_si128(reinterpret_cast<const __m128i *>(p)))
 #else
             : ctrl(p)
@@ -98,7 +98,7 @@ namespace swiss::detail
 
         bit_mask match_h2(std::uint8_t h2) const noexcept
         {
-#if SWISS_TABLE_DETAIL_HAS_SSE2
+#if SWISSMAP_DETAIL_HAS_SSE2
             // sets the 16 signed 8-bit integer values to h2
             // copies the same 8-bit pattern into all 16 lanes of the __m128i
             const __m128i _h2 = _mm_set1_epi8(static_cast<char>(h2));
@@ -123,7 +123,7 @@ namespace swiss::detail
 
         bit_mask match_empty() const noexcept
         {
-#if SWISS_TABLE_DETAIL_HAS_SSE2
+#if SWISSMAP_DETAIL_HAS_SSE2
             // sets the 16 signed 8-bit integer values to ctrl::empty (0b10000000)
             // copies the same 8-bit pattern into all 16 lanes of the __m128i
             const auto _empty = _mm_set1_epi8(static_cast<char>(ctrl::empty));
@@ -148,7 +148,7 @@ namespace swiss::detail
 
         bit_mask match_empty_or_deleted() const noexcept
         {
-#if SWISS_TABLE_DETAIL_HAS_SSE2
+#if SWISSMAP_DETAIL_HAS_SSE2
             return {static_cast<std::uint32_t>(_mm_movemask_epi8(_ctrl))};
 #else
             std::uint32_t bits = 0;
@@ -183,4 +183,4 @@ namespace swiss::detail
     };
 }
 
-#undef SWISS_TABLE_DETAIL_HAS_SSE2
+#undef SWISSMAP_DETAIL_HAS_SSE2

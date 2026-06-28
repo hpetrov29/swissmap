@@ -70,6 +70,11 @@ namespace swiss
             return static_cast<double>(m_size) / static_cast<double>(m_capacity);
         }
 
+        [[nodiscard]] static constexpr bucket_layout effective_layout() noexcept
+        {
+            return use_soa_layout ? bucket_layout::soa : bucket_layout::aos;
+        }
+
     public:
         Value *find(const Key &key)
         {
