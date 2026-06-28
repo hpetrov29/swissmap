@@ -228,17 +228,15 @@ namespace swiss
     };
 
     template <class Key, class Value>
-    struct map_slot
+    struct aos_slot
     {
-        using KeyType = Key;
-        using ValueType = Value;
         Key key;
         Value value;
 
         template <class K, class... Args>
             requires std::constructible_from<Key, K &&> &&
                          std::constructible_from<Value, Args &&...>
-        constexpr map_slot(K &&k, Args &&...args)
+        constexpr aos_slot(K &&k, Args &&...args)
             : key(std::forward<K>(k)), value(std::forward<Args>(args)...)
         {
         }
@@ -257,15 +255,13 @@ namespace swiss
         soa,
     };
 
-    template <class Slot>
+    template <class Key, class Value>
     struct aos_bucket_group
     {
-
-        using Key = typename Slot::KeyType;
-        using Value = typename Slot::ValueType;
+        using slot_type = aos_slot<Key, Value>;
 
         alignas(control_word::width) ctrl_t ctrl_bytes[control_word::width];
-        slot_storage<Slot> slots[control_word::width];
+        slot_storage<slot_type> slots[control_word::width];
 
         constexpr aos_bucket_group() noexcept
         {
@@ -313,7 +309,7 @@ namespace swiss
             slots[lane].construct(std::forward<K>(key), std::forward<Args>(args)...);
         }
 
-        void destroy(std::size_t lane) noexcept(std::is_nothrow_destructible_v<Slot>)
+        void destroy(std::size_t lane) noexcept(std::is_nothrow_destructible_v<slot_type>)
         {
             slots[lane].destroy();
         }
@@ -334,12 +330,9 @@ namespace swiss
         }
     };
 
-    template <class Slot>
+    template <class Key, class Value>
     struct soa_bucket_group
     {
-        using Key = typename Slot::KeyType;
-        using Value = typename Slot::ValueType;
-
         // Split storage keeps the 16 keys and 16 values in separate arrays instead of
         // storing 16 {key, value} pairs. This removes per-slot padding when Key and
         // Value have different sizes/alignments.
@@ -440,12 +433,11 @@ namespace swiss
     class swissmap
     {
     public:
-        using slot_type = map_slot<Key, Value>;
+        using slot_type = aos_slot<Key, Value>;
         static constexpr bool slot_has_padding = sizeof(slot_type) > sizeof(Key) + sizeof(Value);
-        static constexpr bool use_soa_layout =
-            Layout == bucket_layout::soa ||
-            (Layout == bucket_layout::automatic && slot_has_padding);
-        using group_type = std::conditional_t<use_soa_layout, soa_bucket_group<slot_type>, aos_bucket_group<slot_type>>;
+        static constexpr bool use_soa_layout = (Layout == bucket_layout::soa) || (Layout == bucket_layout::automatic && slot_has_padding);
+        
+        using group_type = std::conditional_t<use_soa_layout, soa_bucket_group<Key, Value>, aos_bucket_group<Key, Value>>;
         static constexpr std::size_t group_width = control_word::width;
 
         explicit swissmap(std::size_t capacity)
