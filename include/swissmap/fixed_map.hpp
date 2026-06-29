@@ -186,7 +186,7 @@ namespace swiss
             return true;
         }
 
-        std::optional<Value> remove(const Key &key)
+        std::optional<Value> extract(const Key &key)
             requires std::move_constructible<Value>
         {
             const std::optional<detail::slot_position> pos = lookup_slot(key);
@@ -198,6 +198,24 @@ namespace swiss
 
             group_type &group = m_groups[pos->group_index];
             std::optional<Value> removed(std::move(group.value_at(pos->lane)));
+
+            erase_slot(*pos);
+            return removed;
+        }
+
+        template <Value Missing>
+        Value extract_or(const Key &key)
+            requires std::move_constructible<Value>
+        {
+            const auto pos = lookup_slot(key);
+
+            if (!pos)
+            {
+                return Missing;
+            }
+
+            group_type &group = m_groups[pos->group_index];
+            Value removed(std::move(group.value_at(pos->lane)));
 
             erase_slot(*pos);
             return removed;
