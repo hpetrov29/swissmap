@@ -33,7 +33,7 @@ namespace swiss
         using slot_type = detail::aos_slot<Key, Value>;
         static constexpr bool slot_has_padding = sizeof(slot_type) > sizeof(Key) + sizeof(Value);
         static constexpr bool use_soa_layout = (Layout == bucket_layout::soa) || (Layout == bucket_layout::automatic && slot_has_padding);
-        
+
         using group_type = std::conditional_t<use_soa_layout, detail::soa_bucket_group<Key, Value>, detail::aos_bucket_group<Key, Value>>;
         static constexpr std::size_t group_width = detail::control_word::width;
 
@@ -108,7 +108,7 @@ namespace swiss
             detail::slot_position insert_pos{};
             bool has_insert_pos = false;
 
-            while (true)
+            do
             {
                 const std::size_t group_index = seq.group_index();
                 group_type &bucket = m_groups[group_index];
@@ -147,8 +147,22 @@ namespace swiss
                     return true;
                 }
 
-                seq.next();
+            } while (seq.advance());
+
+            if (!has_insert_pos)
+            {
+                return false;
             }
+
+            group_type &target = m_groups[insert_pos.group_index];
+            target.construct(
+                insert_pos.lane,
+                std::forward<K>(key),
+                std::forward<Args>(args)...);
+
+            target.set_control_byte(insert_pos.lane, static_cast<detail::ctrl_t>(parts.h2));
+            ++m_size;
+            return true;
         }
 
         template <class K, class V>
@@ -157,6 +171,29 @@ namespace swiss
         bool insert(K &&key, V &&value)
         {
             return try_emplace(std::forward<K>(key), std::forward<V>(value));
+        }
+
+        bool erase(const Key &key)
+        {
+            const std::optional<detail::slot_position> pos = lookup_slot(key);
+
+            if (!pos)
+            {
+                return false;
+            }
+
+            group_type &group = m_groups[pos->group_index];
+
+            // any EMPTY found in the same group as the entry we're erasing
+            // belongs to another lane in the same aligned group.
+            const bool group_already_has_empty = group.get_control_word().match_empty().any();
+
+            group.destroy(pos->lane);
+
+            group.set_control_byte(pos->lane, group_already_has_empty ? detail::ctrl::empty : detail::ctrl::deleted);
+
+            --m_size;
+            return true;
         }
 
     public:
@@ -173,7 +210,7 @@ namespace swiss
             const detail::hash_parts parts = hash_key(key);
             detail::probe_seq seq(parts.h1, m_group_mask);
 
-            while (true)
+            do
             {
                 const std::size_t group_index = seq.group_index();
                 group_type &bucket = m_groups[group_index];
@@ -189,8 +226,9 @@ namespace swiss
                     return true;
                 }
 
-                seq.next();
-            }
+            } while (seq.advance());
+
+            return false;
         }
 
         template <class K, class V>
@@ -218,7 +256,7 @@ namespace swiss
             const detail::hash_parts parts = hash_key(key);
             detail::probe_seq seq(parts.h1, m_group_mask);
 
-            while (true)
+            do
             {
                 const std::size_t group_index = seq.group_index();
                 const group_type &bucket = m_groups[group_index];
@@ -239,9 +277,9 @@ namespace swiss
                 {
                     return std::nullopt;
                 }
+            } while (seq.advance());
 
-                seq.next();
-            }
+            return std::nullopt;
         }
 
         void reset_control_bytes() noexcept

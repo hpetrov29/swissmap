@@ -175,10 +175,17 @@ namespace swiss::detail
 
         constexpr std::size_t group_index() const noexcept { return index; }
 
-        constexpr void next() noexcept
+        [[nodiscard]] constexpr bool advance() noexcept
         {
+            // current group is the last unvisited group.
+            if (stride == mask)
+            {
+                return false;
+            }
+
             ++stride;
             index = (index + stride) & mask;
+            return true;
         }
     };
 }
