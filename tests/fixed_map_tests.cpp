@@ -3,6 +3,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstddef>
+#include <optional>
 #include <stdexcept>
 #include <string>
 
@@ -41,6 +42,24 @@ namespace
         CHECK_FALSE(map.contains(1001));
         CHECK(map.contains(1002));
         CHECK_FALSE(map.erase(1001));
+    }
+
+    template <class Map>
+    void check_basic_remove()
+    {
+        Map map(16);
+
+        REQUIRE(map.try_emplace(1001, "first order"));
+        REQUIRE(map.try_emplace(1002, "second order"));
+
+        std::optional<std::string> removed = map.remove(1001);
+
+        REQUIRE(removed.has_value());
+        CHECK(*removed == "first order");
+        CHECK(map.size() == 1);
+        CHECK_FALSE(map.contains(1001));
+        CHECK(map.contains(1002));
+        CHECK_FALSE(map.remove(1001).has_value());
     }
 }
 
@@ -112,6 +131,19 @@ TEST_CASE("entries can be erased from both layouts")
     SECTION("SoA")
     {
         check_basic_erase<swiss::swissmap_soa<int, std::string>>();
+    }
+}
+
+TEST_CASE("entries can be removed from both layouts")
+{
+    SECTION("AoS")
+    {
+        check_basic_remove<swiss::swissmap_aos<int, std::string>>();
+    }
+
+    SECTION("SoA")
+    {
+        check_basic_remove<swiss::swissmap_soa<int, std::string>>();
     }
 }
 

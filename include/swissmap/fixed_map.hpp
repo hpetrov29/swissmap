@@ -182,18 +182,25 @@ namespace swiss
                 return false;
             }
 
-            group_type &group = m_groups[pos->group_index];
-
-            // any EMPTY found in the same group as the entry we're erasing
-            // belongs to another lane in the same aligned group.
-            const bool group_already_has_empty = group.get_control_word().match_empty().any();
-
-            group.destroy(pos->lane);
-
-            group.set_control_byte(pos->lane, group_already_has_empty ? detail::ctrl::empty : detail::ctrl::deleted);
-
-            --m_size;
+            erase_slot(*pos);
             return true;
+        }
+
+        std::optional<Value> remove(const Key &key)
+            requires std::move_constructible<Value>
+        {
+            const std::optional<detail::slot_position> pos = lookup_slot(key);
+
+            if (!pos)
+            {
+                return std::nullopt;
+            }
+
+            group_type &group = m_groups[pos->group_index];
+            std::optional<Value> removed(std::move(group.value_at(pos->lane)));
+
+            erase_slot(*pos);
+            return removed;
         }
 
     public:
@@ -280,6 +287,21 @@ namespace swiss
             } while (seq.advance());
 
             return std::nullopt;
+        }
+
+        void erase_slot(detail::slot_position pos) noexcept(std::is_nothrow_destructible_v<slot_type>)
+        {
+            group_type &group = m_groups[pos.group_index];
+
+            // any EMPTY found in the same group as the entry we're erasing
+            // belongs to another lane in the same aligned group.
+            const bool group_already_has_empty = group.get_control_word().match_empty().any();
+
+            group.destroy(pos.lane);
+
+            group.set_control_byte(pos.lane, group_already_has_empty ? detail::ctrl::empty : detail::ctrl::deleted);
+
+            --m_size;
         }
 
         void reset_control_bytes() noexcept
