@@ -75,7 +75,7 @@ namespace swiss
             return use_soa_layout ? bucket_layout::soa : bucket_layout::aos;
         }
 
-    public:
+    public: // pointer lookup
         Value *find(const Key &key)
         {
             detail::slot_position pos{};
@@ -88,6 +88,13 @@ namespace swiss
             return lookup_slot(key, pos) ? &m_groups[pos.group_index].value_at(pos.lane) : nullptr;
         }
 
+        [[nodiscard]] bool contains(const Key &key) const
+        {
+            detail::slot_position pos{};
+            return lookup_slot(key, pos);
+        }
+
+    public: // sentinel-returning
         template <auto Missing>
         [[nodiscard]] Value find_or(const Key &key) const
             requires std::constructible_from<Value, const Value &> &&
@@ -103,13 +110,26 @@ namespace swiss
             return m_groups[pos.group_index].value_at(pos.lane);
         }
 
-        [[nodiscard]] bool contains(const Key &key) const
+        template <auto Missing>
+        [[nodiscard]] Value extract_or(const Key &key)
+            requires std::move_constructible<Value> &&
+                     std::constructible_from<Value, decltype(Missing)>
         {
             detail::slot_position pos{};
-            return lookup_slot(key, pos);
+
+            if (!lookup_slot(key, pos))
+            {
+                return Value{Missing};
+            }
+
+            group_type &group = m_groups[pos.group_index];
+            Value removed(std::move(group.value_at(pos.lane)));
+
+            erase_slot(pos);
+            return removed;
         }
 
-    public:
+    public: // insertion
         template <class K, class... Args>
             requires std::constructible_from<Key, K &&> && std::constructible_from<Value, Args &&...>
         bool try_emplace(K &&key, Args &&...args)
@@ -189,6 +209,7 @@ namespace swiss
             return try_emplace(std::forward<K>(key), std::forward<V>(value));
         }
 
+    public: // removal and extraction
         bool erase(const Key &key)
         {
             detail::slot_position pos{};
@@ -219,26 +240,7 @@ namespace swiss
             return removed;
         }
 
-        template <auto Missing>
-        Value extract_or(const Key &key)
-            requires std::move_constructible<Value> &&
-                     std::constructible_from<Value, decltype(Missing)>
-        {
-            detail::slot_position pos{};
-
-            if (!lookup_slot(key, pos))
-            {
-                return Value{Missing};
-            }
-
-            group_type &group = m_groups[pos.group_index];
-            Value removed(std::move(group.value_at(pos.lane)));
-
-            erase_slot(pos);
-            return removed;
-        }
-
-    public:
+    public: // unchecked insertion
         template <class K, class... Args>
             requires std::constructible_from<Key, K &&> &&
                      std::constructible_from<Value, Args &&...>
