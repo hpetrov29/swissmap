@@ -78,19 +78,35 @@ namespace swiss
     public:
         Value *find(const Key &key)
         {
-            std::optional<detail::slot_position> pos = lookup_slot(key);
-            return pos ? &m_groups[pos->group_index].value_at(pos->lane) : nullptr;
+            detail::slot_position pos{};
+            return lookup_slot(key, pos) ? &m_groups[pos.group_index].value_at(pos.lane) : nullptr;
         }
 
         const Value *find(const Key &key) const
         {
-            std::optional<detail::slot_position> pos = lookup_slot(key);
-            return pos ? &m_groups[pos->group_index].value_at(pos->lane) : nullptr;
+            detail::slot_position pos{};
+            return lookup_slot(key, pos) ? &m_groups[pos.group_index].value_at(pos.lane) : nullptr;
+        }
+
+        template <auto Missing>
+        [[nodiscard]] Value find_or(const Key &key) const
+            requires std::constructible_from<Value, const Value &> &&
+                     std::constructible_from<Value, decltype(Missing)>
+        {
+            detail::slot_position pos{};
+
+            if (!lookup_slot(key, pos))
+            {
+                return Value{Missing};
+            }
+
+            return m_groups[pos.group_index].value_at(pos.lane);
         }
 
         [[nodiscard]] bool contains(const Key &key) const
         {
-            return lookup_slot(key).has_value();
+            detail::slot_position pos{};
+            return lookup_slot(key, pos);
         }
 
     public:
@@ -175,49 +191,50 @@ namespace swiss
 
         bool erase(const Key &key)
         {
-            const std::optional<detail::slot_position> pos = lookup_slot(key);
+            detail::slot_position pos{};
 
-            if (!pos)
+            if (!lookup_slot(key, pos))
             {
                 return false;
             }
 
-            erase_slot(*pos);
+            erase_slot(pos);
             return true;
         }
 
         std::optional<Value> extract(const Key &key)
             requires std::move_constructible<Value>
         {
-            const std::optional<detail::slot_position> pos = lookup_slot(key);
+            detail::slot_position pos{};
 
-            if (!pos)
+            if (!lookup_slot(key, pos))
             {
                 return std::nullopt;
             }
 
-            group_type &group = m_groups[pos->group_index];
-            std::optional<Value> removed(std::move(group.value_at(pos->lane)));
+            group_type &group = m_groups[pos.group_index];
+            std::optional<Value> removed(std::move(group.value_at(pos.lane)));
 
-            erase_slot(*pos);
+            erase_slot(pos);
             return removed;
         }
 
-        template <Value Missing>
+        template <auto Missing>
         Value extract_or(const Key &key)
-            requires std::move_constructible<Value>
+            requires std::move_constructible<Value> &&
+                     std::constructible_from<Value, decltype(Missing)>
         {
-            const auto pos = lookup_slot(key);
+            detail::slot_position pos{};
 
-            if (!pos)
+            if (!lookup_slot(key, pos))
             {
-                return Missing;
+                return Value{Missing};
             }
 
-            group_type &group = m_groups[pos->group_index];
-            Value removed(std::move(group.value_at(pos->lane)));
+            group_type &group = m_groups[pos.group_index];
+            Value removed(std::move(group.value_at(pos.lane)));
 
-            erase_slot(*pos);
+            erase_slot(pos);
             return removed;
         }
 
@@ -271,12 +288,7 @@ namespace swiss
             return detail::split_hash(m_hash(key));
         }
 
-        std::optional<detail::slot_position> lookup_slot(const Key &key)
-        {
-            return std::as_const(*this).lookup_slot(key);
-        }
-
-        std::optional<detail::slot_position> lookup_slot(const Key &key) const
+        bool lookup_slot(const Key &key, detail::slot_position &out) const
         {
             const detail::hash_parts parts = hash_key(key);
             detail::probe_seq seq(parts.h1, m_group_mask);
@@ -294,17 +306,18 @@ namespace swiss
 
                     if (m_eq(bucket.key_at(lane), key))
                     {
-                        return detail::slot_position{group_index, lane};
+                        out = detail::slot_position{group_index, lane};
+                        return true;
                     }
                 }
 
                 if (word.match_empty().any())
                 {
-                    return std::nullopt;
+                    return false;
                 }
             } while (seq.advance());
 
-            return std::nullopt;
+            return false;
         }
 
         void erase_slot(detail::slot_position pos) noexcept(std::is_nothrow_destructible_v<slot_type>)

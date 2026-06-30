@@ -45,21 +45,21 @@ namespace
     }
 
     template <class Map>
-    void check_basic_remove()
+    void check_basic_extract()
     {
         Map map(16);
 
         REQUIRE(map.try_emplace(1001, "first order"));
         REQUIRE(map.try_emplace(1002, "second order"));
 
-        std::optional<std::string> removed = map.remove(1001);
+        std::optional<std::string> removed = map.extract(1001);
 
         REQUIRE(removed.has_value());
         CHECK(*removed == "first order");
         CHECK(map.size() == 1);
         CHECK_FALSE(map.contains(1001));
         CHECK(map.contains(1002));
-        CHECK_FALSE(map.remove(1001).has_value());
+        CHECK_FALSE(map.extract(1001).has_value());
     }
 }
 
@@ -121,6 +121,17 @@ TEST_CASE("inserting a duplicate key keeps the original value")
     CHECK(map.size() == 1);
 }
 
+TEST_CASE("find_or returns a value or compile-time sentinel")
+{
+    swiss::swissmap<int, int> map(16);
+
+    REQUIRE(map.insert(42, 7));
+
+    const swiss::swissmap<int, int> &const_map = map;
+    CHECK(const_map.find_or<-1>(42) == 7);
+    CHECK(const_map.find_or<-1>(99) == -1);
+}
+
 TEST_CASE("entries can be erased from both layouts")
 {
     SECTION("AoS")
@@ -134,17 +145,28 @@ TEST_CASE("entries can be erased from both layouts")
     }
 }
 
-TEST_CASE("entries can be removed from both layouts")
+TEST_CASE("entries can be extracted from both layouts")
 {
     SECTION("AoS")
     {
-        check_basic_remove<swiss::swissmap_aos<int, std::string>>();
+        check_basic_extract<swiss::swissmap_aos<int, std::string>>();
     }
 
     SECTION("SoA")
     {
-        check_basic_remove<swiss::swissmap_soa<int, std::string>>();
+        check_basic_extract<swiss::swissmap_soa<int, std::string>>();
     }
+}
+
+TEST_CASE("extract_or returns a sentinel when the key is missing")
+{
+    swiss::swissmap<int, int> map(16);
+
+    REQUIRE(map.insert(1001, 42));
+
+    CHECK(map.extract_or<-1>(1001) == 42);
+    CHECK_FALSE(map.contains(1001));
+    CHECK(map.extract_or<-1>(1001) == -1);
 }
 
 TEST_CASE("a tombstone preserves lookup of a displaced key")
